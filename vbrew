@@ -154,7 +154,7 @@ def versioned_install(recipe_context, package, version=None):
             try:
                 for dep in deps:
                     dep_version = dep_to_version[dep]
-                    if version:
+                    if dep_version:
                         brew_execute(["switch", dep, dep_version])
                     else:
                         brew_execute(["link", dep])
