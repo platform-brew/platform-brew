@@ -39,6 +39,7 @@ else:
 
 NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pass to script with --brew argument."
 VERBOSE = False
+RELAXED = False
 
 
 class BrewContext(object):
@@ -79,6 +80,7 @@ class RecipeContext(object):
 
 def main():
     global VERBOSE
+    global RELAXED
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--brew", help="Path to linuxbrew 'brew' executable to target")
     actions = ["vinstall", "vuninstall", "vdeps", "vinfo", "env"]
@@ -87,10 +89,13 @@ def main():
         parser.add_argument('action', metavar='action', help="Versioned action to perform.", choices=actions)
     parser.add_argument('recipe', metavar='recipe', help="Recipe for action - should be absolute (e.g. homebrew/science/samtools).")
     parser.add_argument('version', metavar='version', help="Version for action (e.g. 0.1.19).")
+    parser.add_argument('--relaxed', action='store_true', help="Relaxed processing - for instance allow use of env on non-vinstall-ed recipes.")
     parser.add_argument('--verbose', action='store_true', help="Verbose output")
     args = parser.parse_args()
     if args.verbose:
         VERBOSE = True
+    if args.relaxed:
+        RELAXED = True
     if not action:
         action = args.action
     brew_context = BrewContext(args)
@@ -197,10 +202,15 @@ def print_versioned_deps(recipe_context, recipe, version):
         print val
 
 
-def load_versioned_deps(cellar_path):
+def load_versioned_deps(cellar_path, relaxed=None):
+    if relaxed is None:
+        relaxed = RELAXED
     v_metadata_path = os.path.join(cellar_path, "INSTALL_RECEIPT_VERSIONED.json")
     if not os.path.isfile(v_metadata_path):
-        raise IOError("Could not locate versioned receipt file: {}".format(v_metadata_path))
+        if RELAXED:
+            return []
+        else:
+            raise IOError("Could not locate versioned receipt file: {}".format(v_metadata_path))
     with open(v_metadata_path, "r") as f:
         metadata = json.load(f)
     return metadata['deps']
