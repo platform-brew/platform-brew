@@ -147,7 +147,7 @@ def versioned_install(recipe_context, package, version=None):
                     unversioned_install(dep)
                 dep_metadata = {
                     'name': dep,
-                    'version': version,
+                    'version': dep_version,
                     'versioned': versioned
                 }
                 deps_metadata.append(dep_metadata)
