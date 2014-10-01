@@ -152,12 +152,6 @@ def versioned_install(recipe_context, package, version=None):
                     # Install latest.
                     dep_to_version[dep] = None
                     unversioned_install(dep)
-                dep_metadata = {
-                    'name': dep,
-                    'version': dep_version,
-                    'versioned': versioned
-                }
-                deps_metadata.append(dep_metadata)
             try:
                 for dep in deps:
                     dep_version = dep_to_version[dep]
@@ -165,6 +159,15 @@ def versioned_install(recipe_context, package, version=None):
                         brew_execute(["switch", dep, dep_version])
                     else:
                         brew_execute(["link", dep])
+                    # dep_version obtained from brew versions doesn't
+                    # include revision. This linked_keg attribute does.
+                    keg_verion = brew_info(dep)[0]["linked_keg"]
+                    dep_metadata = {
+                        'name': dep,
+                        'version': keg_verion,
+                        'versioned': versioned
+                    }
+                    deps_metadata.append(dep_metadata)
 
                 brew_execute(["install", package])
                 deps = brew_execute(["deps", package])
@@ -290,6 +293,11 @@ def execute(cmds):
 def brew_deps(package):
     stdout = brew_execute(["deps", package])
     return [p.strip() for p in stdout.split("\n") if p]
+
+
+def brew_info(recipe):
+    info_json = brew_execute(["info", "--json=v1", recipe])
+    return json.loads(info_json)
 
 
 def brew_versions_info(package, tap_path):
