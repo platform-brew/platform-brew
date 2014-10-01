@@ -108,10 +108,8 @@ def main():
     elif action == "vdeps":
         print_versioned_deps(recipe_context, args.recipe, args.version)
     elif action == "env":
-        deps = load_versioned_deps(recipe_context.cellar_path)
-        deps.append({"name": args.recipe, "version": args.version, "versioned": True})
         cellar_root = recipe_context.brew_context.homebrew_cellar
-        env_statements = build_env_statements(cellar_root, deps)
+        env_statements = build_env_statements(cellar_root, recipe_context.cellar_path)
         print env_statements
     else:
         raise NotImplementedError()
@@ -245,19 +243,27 @@ def brew_execute(args):
     return execute(cmds)
 
 
-def build_env_statements(cellar_root, deps):
+def build_env_statements(cellar_root, cellar_path, relaxed=None):
+    deps = load_versioned_deps(cellar_path, relaxed=relaxed)
+
     path_appends = []
     ld_path_appends = []
-    for dep in deps:
-        package = dep['name']
-        version = dep['version']
-        cellar_path = recipe_cellar_path( cellar_root, package, version )
+
+    def handle_keg(cellar_path):
         bin_path = os.path.join(cellar_path, "bin")
         if os.path.isdir(bin_path):
             path_appends.append(bin_path)
         lib_path = os.path.join(cellar_path, "lib")
         if os.path.isdir(lib_path):
             ld_path_appends.append(lib_path)
+
+    for dep in deps:
+        package = dep['name']
+        version = dep['version']
+        dep_cellar_path = recipe_cellar_path( cellar_root, package, version )
+        handle_keg( dep_cellar_path )
+
+    handle_keg( cellar_path )
     env_statements = []
     if path_appends:
         env_statements.append("PATH=" + ":".join(path_appends) + ":$PATH")
