@@ -37,7 +37,7 @@ else:
     DEFAULT_HOMEBREW_ROOT = os.path.join(os.path.expanduser("~"), ".linuxbrew")
 
 NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pass to script with --brew argument."
-
+VERBOSE = False
 
 class BrewContext(object):
 
@@ -76,13 +76,17 @@ class RecipeContext(object):
 
 
 def main():
+    global VERBOSE
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--brew", help="Path to linuxbrew 'brew' executable to target")
     actions = ["vinstall", "vuninstall", "vdeps", "vinfo", "env"]
     parser.add_argument('action', metavar='action', help="Versioned action to perform.", choices=actions)
     parser.add_argument('recipe', metavar='recipe', help="Recipe for action - should be absolute (e.g. homebrew/science/samtools).")
     parser.add_argument('version', metavar='version', help="Version for action (e.g. 0.1.19).")
+    parser.add_argument('--verbose', action='store_true', help="Verbose output")
     args = parser.parse_args()
+    if args.verbose:
+        VERBOSE = True
     action = args.action
     brew_context = BrewContext(args)
     recipe_context = RecipeContext(args, brew_context)
@@ -270,9 +274,13 @@ def git_execute(args):
 
 def execute(cmds):
     p = subprocess.Popen(cmds, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    #log = p.stdout.read()
+    global VERBOSE
     stdout, stderr = p.communicate()
     if p.returncode != 0:
         raise CommandLineException(" ".join(cmds), stdout, stderr)
+    if VERBOSE:
+        print stdout
     return stdout
 
 
