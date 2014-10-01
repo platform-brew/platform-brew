@@ -40,7 +40,7 @@ NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pa
 
 
 class BrewContext(object):
-    
+
     def __init__(self, args):
         ensure_brew_on_path(args)
         raw_config = brew_execute(["config"])
@@ -108,7 +108,10 @@ class CommandLineException(Exception):
         self.command = command
         self.stdout = stdout
         self.stderr = stderr
-        self.message = "Failed to execute command-line %s, stderr was %s" % (command, stderr)
+        self.message = ("Failed to execute command-line %s, stderr was:\n"
+                        "-------->>begin stderr<<--------\n"
+                        "%s\n"
+                        "-------->>end stderr<<--------\n") % (command, stderr)
 
     def __str__(self):
         return self.message
@@ -184,6 +187,8 @@ def print_versioned_deps(recipe_context, recipe, version):
 def load_versioned_deps(recipe_context, recipe, version):
     cellar_path = recipe_context.cellar_path
     v_metadata_path = os.path.join(cellar_path, "INSTALL_RECEIPT_VERSIONED.json")
+    if not os.path.isfile(v_metadata_path):
+        raise IOError("Could not locate versioned receipt file: {}".format(v_metadata_path))
     with open(v_metadata_path, "r") as f:
         metadata = json.load(f)
     return metadata['deps']
