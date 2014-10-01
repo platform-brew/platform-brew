@@ -103,9 +103,10 @@ def main():
     elif action == "vdeps":
         print_versioned_deps(recipe_context, args.recipe, args.version)
     elif action == "env":
-        deps = load_versioned_deps(recipe_context, args.recipe, args.version)
+        deps = load_versioned_deps(recipe_context.cellar_path)
         deps.append({"name": args.recipe, "version": args.version, "versioned": True})
-        env_statements = build_env_statements(recipe_context, deps)
+        cellar_root = recipe_context.brew_context.homebrew_cellar
+        env_statements = build_env_statements(cellar_root, deps)
         print env_statements
     else:
         raise NotImplementedError()
@@ -188,7 +189,7 @@ def versioned_install(recipe_context, package, version=None):
 
 
 def print_versioned_deps(recipe_context, recipe, version):
-    deps = load_versioned_deps(recipe_context, recipe, version)
+    deps = load_versioned_deps(recipe_context.cellar_path)
     for dep in deps:
         val = dep['name']
         if dep['versioned']:
@@ -196,8 +197,7 @@ def print_versioned_deps(recipe_context, recipe, version):
         print val
 
 
-def load_versioned_deps(recipe_context, recipe, version):
-    cellar_path = recipe_context.cellar_path
+def load_versioned_deps(cellar_path):
     v_metadata_path = os.path.join(cellar_path, "INSTALL_RECEIPT_VERSIONED.json")
     if not os.path.isfile(v_metadata_path):
         raise IOError("Could not locate versioned receipt file: {}".format(v_metadata_path))
@@ -235,13 +235,12 @@ def brew_execute(args):
     return execute(cmds)
 
 
-def build_env_statements(recipe_context, deps):
+def build_env_statements(cellar_root, deps):
     path_appends = []
     ld_path_appends = []
     for dep in deps:
         package = dep['name']
         version = dep['version']
-        cellar_root = recipe_context.brew_context.homebrew_cellar
         cellar_path = recipe_cellar_path( cellar_root, package, version )
         bin_path = os.path.join(cellar_path, "bin")
         if os.path.isdir(bin_path):
