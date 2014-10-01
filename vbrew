@@ -80,14 +80,17 @@ def main():
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--brew", help="Path to linuxbrew 'brew' executable to target")
     actions = ["vinstall", "vuninstall", "vdeps", "vinfo", "env"]
-    parser.add_argument('action', metavar='action', help="Versioned action to perform.", choices=actions)
+    action = __action(sys)
+    if not action:
+        parser.add_argument('action', metavar='action', help="Versioned action to perform.", choices=actions)
     parser.add_argument('recipe', metavar='recipe', help="Recipe for action - should be absolute (e.g. homebrew/science/samtools).")
     parser.add_argument('version', metavar='version', help="Version for action (e.g. 0.1.19).")
     parser.add_argument('--verbose', action='store_true', help="Verbose output")
     args = parser.parse_args()
     if args.verbose:
         VERBOSE = True
-    action = args.action
+    if not action:
+        action = args.action
     brew_context = BrewContext(args)
     recipe_context = RecipeContext(args, brew_context)
     if action == "vinstall":
@@ -305,6 +308,14 @@ def brew_version_info(package, tap_path):
     version_parts = map(lambda l: WHITESPACE_PATTERN.split(l), version_parts)
     info = [(p[0], p[3], versioned(p[4])) for p in version_parts]
     return info
+
+
+def __action(sys):
+    script_name = os.path.basename(sys.argv[0])
+    if script_name.startswith("brew-"):
+        return script_name[len("brew-"):]
+    else:
+        return None
 
 
 def recipe_cellar_path(cellar_path, recipe, version):
