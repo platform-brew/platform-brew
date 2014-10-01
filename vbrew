@@ -40,6 +40,7 @@ else:
 NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pass to script with --brew argument."
 VERBOSE = False
 
+
 class BrewContext(object):
 
     def __init__(self, args):
