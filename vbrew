@@ -377,7 +377,8 @@ def extended_brew_info(recipe):
         for dep_type in ["Build", "Required", "Recommended", "Optional"]:
             if line.startswith("%s: " % dep_type):
                 key = "%s_dependencies" % dep_type.lower()
-                extra_info[key].append(line[len("%s: " % dep_type):])
+                raw_val = line[len("%s: " % dep_type):]
+                extra_info[key].extend(raw_val.split(", "))
     return extra_info
 
 
