@@ -76,7 +76,7 @@ class RecipeContext(object):
         parts = recipe.split("/")
         if len(parts) == 1:
             info = brew_info(self.recipe)
-            from_url = info[0]["from_url"]
+            from_url = info["from_url"]
             if not from_url:
                 raise Exception(CANNOT_DETERMINE_TAP_ERROR_MESSAGE)
             from_url_parts = from_url.split("/")
@@ -128,6 +128,9 @@ def main():
         cellar_root = recipe_context.brew_context.homebrew_cellar
         env_statements = build_env_statements(cellar_root, recipe_context.cellar_path)
         print env_statements
+    elif action == "vinfo":
+        with brew_head_at_version(recipe_context, args.recipe, args.version):
+            print brew_info(args.recipe)
     else:
         raise NotImplementedError()
 
@@ -178,7 +181,7 @@ def versioned_install(recipe_context, package, version=None):
                     brew_execute(["link", dep])
                 # dep_version obtained from brew versions doesn't
                 # include revision. This linked_keg attribute does.
-                keg_verion = brew_info(dep)[0]["linked_keg"]
+                keg_verion = brew_info(dep)["linked_keg"]
                 dep_metadata = {
                     'name': dep,
                     'version': keg_verion,
@@ -351,8 +354,8 @@ def brew_deps(package):
 
 def brew_info(recipe):
     info_json = brew_execute(["info", "--json=v1", recipe])
-    info = json.loads(info_json)
-    info[0].update(extended_brew_info(recipe))
+    info = json.loads(info_json)[0]
+    info.update(extended_brew_info(recipe))
     return info
 
 
