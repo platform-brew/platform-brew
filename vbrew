@@ -135,10 +135,63 @@ class CommandLineException(Exception):
 
 
 def versioned_install(recipe_context, package, version=None):
+    changeset = changeset_for_version(recipe_context, package, version)
     tap_path = recipe_context.tap_path
+    attempt_unlink(package)
+    with brew_changeset(changeset, tap_path):
+        deps = brew_deps(package)
+        deps_metadata = []
+        dep_to_version = {}
+        for dep in deps:
+            version_info = brew_versions_info(dep, recipe_context.tap_path)[0]
+            dep_version = version_info[0]
+            dep_to_version[dep] = dep_version
+            versioned = version_info[2]
+            if versioned:
+                dep_to_version[dep] = dep_version
+                versioned_install(recipe_context, dep, dep_version)
+            else:
+                # Install latest.
+                dep_to_version[dep] = None
+                unversioned_install(dep)
+        try:
+            for dep in deps:
+                dep_version = dep_to_version[dep]
+                if dep_version:
+                    brew_execute(["switch", dep, dep_version])
+                else:
+                    brew_execute(["link", dep])
+                # dep_version obtained from brew versions doesn't
+                # include revision. This linked_keg attribute does.
+                keg_verion = brew_info(dep)[0]["linked_keg"]
+                dep_metadata = {
+                    'name': dep,
+                    'version': keg_verion,
+                    'versioned': versioned
+                }
+                deps_metadata.append(dep_metadata)
+
+            brew_execute(["install", package])
+            deps = brew_execute(["deps", package])
+            deps = [d.strip() for d in deps.split("\n") if d]
+            metadata = {
+                'deps': deps_metadata
+            }
+            cellar_root = recipe_context.brew_context.homebrew_cellar
+            cellar_path = recipe_cellar_path( cellar_root, package, version )
+            v_metadata_path = os.path.join(cellar_path, "INSTALL_RECEIPT_VERSIONED.json")
+            with open(v_metadata_path, "w") as f:
+                json.dump(metadata, f)
+
+        finally:
+            attempt_unlink_all(package, deps)
+
+
+def changeset_for_version(recipe_context, package, version):
+    tap_path = recipe_context.tap_path
+    changeset = None
     with brew_changeset("master", tap_path):
         version_to_changeset = brew_versions_info(package, recipe_context.tap_path)
-        changeset = None
         if version is None:
             version = version_to_changeset[0][0]
             changeset = version_to_changeset[0][1]
@@ -146,56 +199,9 @@ def versioned_install(recipe_context, package, version=None):
             for mapping in version_to_changeset:
                 if mapping[0] == version:
                     changeset = mapping[1]
-        if changeset is None:
-            raise Exception("Failed to find changeset for version %s" % version)
-        attempt_unlink(package)
-        with brew_changeset(changeset, tap_path):
-            deps = brew_deps(package)
-            deps_metadata = []
-            dep_to_version = {}
-            for dep in deps:
-                version_info = brew_versions_info(dep, recipe_context.tap_path)[0]
-                dep_version = version_info[0]
-                dep_to_version[dep] = dep_version
-                versioned = version_info[2]
-                if versioned:
-                    dep_to_version[dep] = dep_version
-                    versioned_install(recipe_context, dep, dep_version)
-                else:
-                    # Install latest.
-                    dep_to_version[dep] = None
-                    unversioned_install(dep)
-            try:
-                for dep in deps:
-                    dep_version = dep_to_version[dep]
-                    if dep_version:
-                        brew_execute(["switch", dep, dep_version])
-                    else:
-                        brew_execute(["link", dep])
-                    # dep_version obtained from brew versions doesn't
-                    # include revision. This linked_keg attribute does.
-                    keg_verion = brew_info(dep)[0]["linked_keg"]
-                    dep_metadata = {
-                        'name': dep,
-                        'version': keg_verion,
-                        'versioned': versioned
-                    }
-                    deps_metadata.append(dep_metadata)
-
-                brew_execute(["install", package])
-                deps = brew_execute(["deps", package])
-                deps = [d.strip() for d in deps.split("\n") if d]
-                metadata = {
-                    'deps': deps_metadata
-                }
-                cellar_root = recipe_context.brew_context.homebrew_cellar
-                cellar_path = recipe_cellar_path( cellar_root, package, version )
-                v_metadata_path = os.path.join(cellar_path, "INSTALL_RECEIPT_VERSIONED.json")
-                with open(v_metadata_path, "w") as f:
-                    json.dump(metadata, f)
-
-            finally:
-                attempt_unlink_all(package, deps)
+    if changeset is None:
+        raise Exception("Failed to find changeset for version %s" % version)
+    return changeset
 
 
 def print_versioned_deps(recipe_context, recipe, version):
