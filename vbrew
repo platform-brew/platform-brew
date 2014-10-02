@@ -138,6 +138,7 @@ def versioned_install(recipe_context, package, version=None):
     tap_path = recipe_context.tap_path
     with brew_changeset("master", tap_path):
         version_to_changeset = brew_versions_info(package, recipe_context.tap_path)
+        changeset = None
         if version is None:
             version = version_to_changeset[0][0]
             changeset = version_to_changeset[0][1]
@@ -145,6 +146,8 @@ def versioned_install(recipe_context, package, version=None):
             for mapping in version_to_changeset:
                 if mapping[0] == version:
                     changeset = mapping[1]
+        if changeset is None:
+            raise Exception("Failed to find changeset for version %s" % version)
         attempt_unlink(package)
         with brew_changeset(changeset, tap_path):
             deps = brew_deps(package)
