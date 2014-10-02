@@ -152,10 +152,10 @@ class CommandLineException(Exception):
 
 
 def versioned_install(recipe_context, package, version=None):
+    attempt_unlink(package)
     commit = commit_for_version(recipe_context, package, version)
     tap_path = recipe_context.tap_path
-    attempt_unlink(package)
-    with brew_commit(commit, tap_path):
+    with brew_head_at_commit(commit, tap_path):
         deps = brew_deps(package)
         deps_metadata = []
         dep_to_version = {}
@@ -207,7 +207,7 @@ def versioned_install(recipe_context, package, version=None):
 def commit_for_version(recipe_context, package, version):
     tap_path = recipe_context.tap_path
     commit = None
-    with brew_commit("master", tap_path):
+    with brew_head_at_commit("master", tap_path):
         version_to_commit = brew_versions_info(package, recipe_context.tap_path)
         if version is None:
             version = version_to_commit[0][0]
@@ -306,7 +306,7 @@ def build_env_statements(cellar_root, cellar_path, relaxed=None):
 
 
 @contextlib.contextmanager
-def brew_commit(commit, tap_path):
+def brew_head_at_commit(commit, tap_path):
     try:
         os.chdir(tap_path)
         current_commit = git_execute(["rev-parse", "HEAD"]).strip()
