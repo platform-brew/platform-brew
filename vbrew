@@ -135,10 +135,10 @@ class CommandLineException(Exception):
 
 
 def versioned_install(recipe_context, package, version=None):
-    changeset = changeset_for_version(recipe_context, package, version)
+    commit = commit_for_version(recipe_context, package, version)
     tap_path = recipe_context.tap_path
     attempt_unlink(package)
-    with brew_changeset(changeset, tap_path):
+    with brew_commit(commit, tap_path):
         deps = brew_deps(package)
         deps_metadata = []
         dep_to_version = {}
@@ -187,21 +187,21 @@ def versioned_install(recipe_context, package, version=None):
             attempt_unlink_all(package, deps)
 
 
-def changeset_for_version(recipe_context, package, version):
+def commit_for_version(recipe_context, package, version):
     tap_path = recipe_context.tap_path
-    changeset = None
-    with brew_changeset("master", tap_path):
-        version_to_changeset = brew_versions_info(package, recipe_context.tap_path)
+    commit = None
+    with brew_commit("master", tap_path):
+        version_to_commit = brew_versions_info(package, recipe_context.tap_path)
         if version is None:
-            version = version_to_changeset[0][0]
-            changeset = version_to_changeset[0][1]
+            version = version_to_commit[0][0]
+            commit = version_to_commit[0][1]
         else:
-            for mapping in version_to_changeset:
+            for mapping in version_to_commit:
                 if mapping[0] == version:
-                    changeset = mapping[1]
-    if changeset is None:
-        raise Exception("Failed to find changeset for version %s" % version)
-    return changeset
+                    commit = mapping[1]
+    if commit is None:
+        raise Exception("Failed to find commit for version %s" % version)
+    return commit
 
 
 def print_versioned_deps(recipe_context, recipe, version):
@@ -288,15 +288,15 @@ def build_env_statements(cellar_root, cellar_path, relaxed=None):
 
 
 @contextlib.contextmanager
-def brew_changeset(changeset, tap_path):
+def brew_commit(commit, tap_path):
     try:
         os.chdir(tap_path)
-        current_changeset = git_execute(["rev-parse", "HEAD"]).strip()
+        current_commit = git_execute(["rev-parse", "HEAD"]).strip()
         try:
-            git_execute(["checkout", changeset])
+            git_execute(["checkout", commit])
             yield
         finally:
-            git_execute(["checkout", current_changeset])
+            git_execute(["checkout", current_commit])
     finally:
         # TODO: restore chdir - or better yet just don't chdir
         # shouldn't be needed.
