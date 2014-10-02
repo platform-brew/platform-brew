@@ -1,23 +1,23 @@
 #!/usr/bin/env python
 
-# % vbrew vinstall homebrew/science/samtools 1.0
-# % vbrew vinstall homebrew/science/samtools 0.1.19
-# % vbrew vinstall homebrew/science/samtools 1.1
-# % vbrew env homebrew/science/samtools 1.1
+# % brew vinstall samtools 1.0
+# % brew vinstall samtools 0.1.19
+# % brew vinstall samtools 1.1
+# % brew env samtools 1.1
 # PATH=/home/john/.linuxbrew/Cellar/htslib/1.1/bin:/home/john/.linuxbrew/Cellar/samtools/1.1/bin:$PATH
 # export PATH
 # LD_LIBRARY_PATH=/home/john/.linuxbrew/Cellar/htslib/1.1/lib:/home/john/.linuxbrew/Cellar/samtools/1.1/lib:$LD_LIBRARY_PATH
 # export LD_LIBRARY_PATH
-# % . <(vbrew env homebrew/science/samtools 1.1)
+# % . <(brew env samtools 1.1)
 # % which samtools
 # /home/john/.linuxbrew/Cellar/samtools/1.1/bin/samtools
-# % . <(vbrew env homebrew/science/samtools 0.1.19)
+# % . <(brew env samtools 0.1.19)
 # % which samtools
 # /home/john/.linuxbrew/Cellar/samtools/0.1.19/bin/samtools
-# % vbrew vuninstall samtools 1.0
-# % vbrew vdeps samtools 1.1
+# % brew vuninstall samtools 1.0
+# % brew vdeps samtools 1.1
 # htslib@1.1
-# % vbrew vdeps samtools 0.1.19
+# % brew vdeps samtools 0.1.19
 
 import argparse
 import contextlib
@@ -38,6 +38,7 @@ else:
     DEFAULT_HOMEBREW_ROOT = os.path.join(os.path.expanduser("~"), ".linuxbrew")
 
 NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pass to script with --brew argument."
+CANNOT_DETERMINE_TAP_ERROR_MESSAGE = "Cannot determine tap of specified recipe - please use fully qualified recipe (e.g. homebrew/science/samtools)."
 VERBOSE = False
 RELAXED = False
 
@@ -73,8 +74,24 @@ class RecipeContext(object):
 
     def __tap_path(self, recipe):
         parts = recipe.split("/")
-        assert len(parts) == 3
-        path = os.path.join(parts[0], "homebrew-%s" % parts[1])
+        if len(parts) == 1:
+            info = brew_info(self.recipe)
+            from_url = info[0]["from_url"]
+            if not from_url:
+                raise Exception(CANNOT_DETERMINE_TAP_ERROR_MESSAGE)
+            from_url_parts = from_url.split("/")
+            blob_index = from_url_parts.index("blob")  # comes right after username and repository
+            if blob_index < 2:
+                raise Exception(CANNOT_DETERMINE_TAP_ERROR_MESSAGE)
+            username = from_url_parts[blob_index - 2]
+            repository = from_url_parts[blob_index - 1]
+        else:
+            assert len(parts) == 3
+            parts = recipe.split("/")
+            username = parts[0]
+            repository = "homebrew-%s" % parts[1]
+
+        path = os.path.join(username, repository)
         return path
 
 
@@ -252,6 +269,7 @@ def attempt_unlink(package):
 
 
 def brew_execute(args):
+    os.environ["HOMEBREW_NO_EMOJI"] = "1"  # simplify brew parsing.
     cmds = ["brew"] + args
     return execute(cmds)
 
@@ -327,7 +345,31 @@ def brew_deps(package):
 
 def brew_info(recipe):
     info_json = brew_execute(["info", "--json=v1", recipe])
-    return json.loads(info_json)
+    info = json.loads(info_json)
+    info[0].update(extended_brew_info(recipe))
+    return info
+
+
+def extended_brew_info(recipe):
+    # Extract more info from non-json variant. JSON variant should
+    # include this in a backward compatible way (TODO: Open PR).
+    raw_info = brew_execute(["info", recipe])
+    extra_info = dict(
+        from_url=None,
+        build_dependencies=[],
+        required_dependencies=[],
+        recommended_dependencies=[],
+        optional_dependencies=[],
+    )
+
+    for line in raw_info.split("\n"):
+        if line.startswith("From: "):
+            extra_info["from_url"] = line[len("From: "):].strip()
+        for dep_type in ["Build", "Required", "Recommended", "Optional"]:
+            if line.startswith("%s: " % dep_type):
+                key = "%s_dependencies" % dep_type.lower()
+                extra_info[key].append(line[len("%s: " % dep_type):])
+    return extra_info
 
 
 def brew_versions_info(package, tap_path):
