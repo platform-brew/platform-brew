@@ -45,7 +45,7 @@ RELAXED = False
 
 class BrewContext(object):
 
-    def __init__(self, args):
+    def __init__(self, args=None):
         ensure_brew_on_path(args)
         raw_config = brew_execute(["config"])
         config_lines = [l.strip().split(":", 1) for l in raw_config.split("\n") if l]
@@ -59,10 +59,14 @@ class BrewContext(object):
 
 class RecipeContext(object):
 
-    def __init__(self, args, brew_context):
-        self.recipe = args.recipe
-        self.version = args.version
-        self.brew_context = brew_context
+    @staticmethod
+    def from_args(args, brew_context=None):
+        return RecipeContext(args.recipe, args.version, brew_context)
+
+    def __init__(self, recipe, version, brew_context=None):
+        self.recipe = recipe
+        self.version = version
+        self.brew_context = brew_context or BrewContext()
 
     @property
     def cellar_path(self):
@@ -116,7 +120,7 @@ def main():
     if not action:
         action = args.action
     brew_context = BrewContext(args)
-    recipe_context = RecipeContext(args, brew_context)
+    recipe_context = RecipeContext.from_args(args, brew_context)
     if action == "vinstall":
         versioned_install(recipe_context, args.recipe, args.version)
     elif action == "vuninstall":
@@ -154,7 +158,11 @@ class CommandLineException(Exception):
         return self.message
 
 
-def versioned_install(recipe_context, package, version=None):
+def versioned_install(recipe_context, package=None, version=None):
+    if package is None:
+        package = recipe_context.recipe
+        version = recipe_context.version
+
     attempt_unlink(package)
     with brew_head_at_version(recipe_context, package, version):
         deps = brew_deps(package)
@@ -431,7 +439,7 @@ def ensure_brew_on_path(args):
             os.environ["PATH"] = "%s:%s" % (os.path.dirname(brew), os.environ["PATH"])
 
     default_brew_path = os.path.join(DEFAULT_HOMEBREW_ROOT, "bin", "brew")
-    if args.brew:
+    if args and args.brew:
         user_brew_path = os.path.abspath(args.brew)
         ensure_on_path(user_brew_path)
     elif brew_on_path:
