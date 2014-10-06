@@ -19,6 +19,8 @@
 # htslib@1.1
 # % brew vdeps samtools 0.1.19
 
+from __future__ import print_function
+
 import argparse
 import contextlib
 import json
@@ -129,12 +131,11 @@ def main():
     elif action == "vdeps":
         print_versioned_deps(recipe_context, args.recipe, args.version)
     elif action == "env":
-        cellar_root = recipe_context.brew_context.homebrew_cellar
-        env_statements = build_env_statements(cellar_root, recipe_context.cellar_path)
-        print env_statements
+        env_statements = build_env_statements_from_recipe_context(recipe_context)
+        print(env_statements)
     elif action == "vinfo":
         with brew_head_at_version(recipe_context, args.recipe, args.version):
-            print brew_info(args.recipe)
+            print(brew_info(args.recipe))
     else:
         raise NotImplementedError()
 
@@ -236,7 +237,7 @@ def print_versioned_deps(recipe_context, recipe, version):
         val = dep['name']
         if dep['versioned']:
             val += "@%s" % dep['version']
-        print val
+        print(val)
 
 
 def load_versioned_deps(cellar_path, relaxed=None):
@@ -281,6 +282,12 @@ def brew_execute(args):
     os.environ["HOMEBREW_NO_EMOJI"] = "1"  # simplify brew parsing.
     cmds = ["brew"] + args
     return execute(cmds)
+
+
+def build_env_statements_from_recipe_context(recipe_context, **kwds):
+    cellar_root = recipe_context.brew_context.homebrew_cellar
+    env_statements = build_env_statements(cellar_root, recipe_context.cellar_path, **kwds)
+    return env_statements
 
 
 def build_env_statements(cellar_root, cellar_path, relaxed=None):
@@ -351,7 +358,7 @@ def execute(cmds):
     if p.returncode != 0:
         raise CommandLineException(" ".join(cmds), stdout, stderr)
     if VERBOSE:
-        print stdout
+        print(stdout)
     return stdout
 
 
