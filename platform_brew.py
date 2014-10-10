@@ -28,6 +28,7 @@ import glob
 import os
 import re
 import sys
+import string
 import subprocess
 
 WHITESPACE_PATTERN = re.compile("[\s]+")
@@ -198,7 +199,11 @@ def versioned_install(recipe_context, package=None, version=None):
                 }
                 deps_metadata.append(dep_metadata)
 
-            brew_execute(["install", package])
+            cellar_root = recipe_context.brew_context.homebrew_cellar
+            cellar_path = recipe_context.cellar_path
+            env_actions = build_env_actions(deps_metadata, cellar_root, cellar_path, custom_only=True)
+            env = EnvAction.build_env(env_actions)
+            brew_execute(["install", "--verbose", package], env=env)
             deps = brew_execute(["deps", package])
             deps = [d.strip() for d in deps.split("\n") if d]
             metadata = {
@@ -278,10 +283,10 @@ def attempt_unlink(package):
         pass
 
 
-def brew_execute(args):
+def brew_execute(args, env=None):
     os.environ["HOMEBREW_NO_EMOJI"] = "1"  # simplify brew parsing.
     cmds = ["brew"] + args
-    return execute(cmds)
+    return execute(cmds, env=env)
 
 
 def build_env_statements_from_recipe_context(recipe_context, **kwds):
@@ -290,11 +295,20 @@ def build_env_statements_from_recipe_context(recipe_context, **kwds):
     return env_statements
 
 
-def build_env_statements(cellar_root, cellar_path, relaxed=None):
+def build_env_statements(cellar_root, cellar_path, relaxed=None, custom_only=False):
     deps = load_versioned_deps(cellar_path, relaxed=relaxed)
+    actions = build_env_actions(deps, cellar_root, cellar_path, relaxed, custom_only)
+    env_statements = []
+    for action in actions:
+        env_statements.extend(action.to_statements())
+    return "\n".join(env_statements)
+
+
+def build_env_actions(deps, cellar_root, cellar_path, relaxed=None, custom_only=False):
 
     path_appends = []
     ld_path_appends = []
+    actions = []
 
     def handle_keg(cellar_path):
         bin_path = os.path.join(cellar_path, "bin")
@@ -303,6 +317,14 @@ def build_env_statements(cellar_root, cellar_path, relaxed=None):
         lib_path = os.path.join(cellar_path, "lib")
         if os.path.isdir(lib_path):
             ld_path_appends.append(lib_path)
+        env_path = os.path.join(cellar_path, "platform_environment.json")
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                env_metadata = json.load(f)
+                if "actions" in env_metadata:
+                    def to_action(desc):
+                        return EnvAction(cellar_path, desc)
+                    actions.extend(map(to_action, env_metadata["actions"]))
 
     for dep in deps:
         package = dep['name']
@@ -311,14 +333,54 @@ def build_env_statements(cellar_root, cellar_path, relaxed=None):
         handle_keg( dep_cellar_path )
 
     handle_keg( cellar_path )
-    env_statements = []
-    if path_appends:
-        env_statements.append("PATH=" + ":".join(path_appends) + ":$PATH")
-        env_statements.append("export PATH")
-    if ld_path_appends:
-        env_statements.append("LD_LIBRARY_PATH=" + ":".join(ld_path_appends) + ":$LD_LIBRARY_PATH")
-        env_statements.append("export LD_LIBRARY_PATH")
-    return "\n".join(env_statements)
+    if not custom_only:
+        if path_appends:
+            actions.append(EnvAction(cellar_path, {"action": "prepend", "variable": "PATH", "value": ":".join(path_appends)}))
+        if ld_path_appends:
+            actions.append(EnvAction(cellar_path, {"action": "prepend", "variable": "LD_LIBRARY_PATH", "value": ":".join(path_appends)}))
+    return actions
+
+
+class EnvAction(object):
+
+    def __init__(self, keg_root, action_description):
+        self.variable = action_description["variable"]
+        self.action = action_description["action"]
+        self.value = string.Template(action_description["value"]).safe_substitute({
+            'KEG_ROOT': keg_root,
+        })
+
+    @staticmethod
+    def build_env(env_actions):
+        new_env = os.environ.copy()
+        map(lambda env_action: env_action.modify_environ(new_env), env_actions)
+        return new_env
+
+    def modify_environ(self, environ):
+        if self.action == "set" or not environ.get(self.variable, ""):
+            environ[self.variable] = self.__eval("${value}")
+        elif self.action == "prepend":
+            environ[self.variable] = self.__eval("${value}:%s" % environ[self.variable])
+        else:
+            environ[self.variable] = self.__eval("%s:${value}" % environ[self.variable])
+
+    def __eval(self, template):
+        return string.Template(template).safe_substitute(
+            variable=self.variable,
+            value=self.value,
+        )
+
+    def to_statements(self):
+        if self.action == "set":
+            template = '''${variable}="${value}"'''
+        elif self.action == "prepend":
+            template = '''${variable}="${value}:${variable}"'''
+        else:
+            template = '''${variable}="${variable}:${value}"'''
+        return [
+            self.__eval(template),
+            "export %s" % self.variable
+        ]
 
 
 @contextlib.contextmanager
@@ -350,8 +412,15 @@ def git_execute(args):
     return execute(cmds)
 
 
-def execute(cmds):
-    p = subprocess.Popen(cmds, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def execute(cmds, env=None):
+    subprocess_kwds = dict(
+        shell=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if env:
+        subprocess_kwds["env"] = env
+    p = subprocess.Popen(cmds, **subprocess_kwds)
     #log = p.stdout.read()
     global VERBOSE
     stdout, stderr = p.communicate()
