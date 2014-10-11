@@ -44,6 +44,7 @@ NO_BREW_ERROR_MESSAGE = "Could not find brew on PATH, please place on path or pa
 CANNOT_DETERMINE_TAP_ERROR_MESSAGE = "Cannot determine tap of specified recipe - please use fully qualified recipe (e.g. homebrew/science/samtools)."
 VERBOSE = False
 RELAXED = False
+BREW_ARGS = []
 
 
 class BrewContext(object):
@@ -105,6 +106,7 @@ class RecipeContext(object):
 def main():
     global VERBOSE
     global RELAXED
+    global BREW_ARGS
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("--brew", help="Path to linuxbrew 'brew' executable to target")
     actions = ["vinstall", "vuninstall", "vdeps", "vinfo", "env"]
@@ -115,11 +117,13 @@ def main():
     parser.add_argument('version', metavar='version', help="Version for action (e.g. 0.1.19).")
     parser.add_argument('--relaxed', action='store_true', help="Relaxed processing - for instance allow use of env on non-vinstall-ed recipes.")
     parser.add_argument('--verbose', action='store_true', help="Verbose output")
+    parser.add_argument('restargs', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.verbose:
         VERBOSE = True
     if args.relaxed:
         RELAXED = True
+    BREW_ARGS = args.restargs
     if not action:
         action = args.action
     brew_context = BrewContext(args)
@@ -203,7 +207,12 @@ def versioned_install(recipe_context, package=None, version=None):
             cellar_path = recipe_context.cellar_path
             env_actions = build_env_actions(deps_metadata, cellar_root, cellar_path, custom_only=True)
             env = EnvAction.build_env(env_actions)
-            brew_execute(["install", "--verbose", package], env=env)
+            args = ["install"]
+            if VERBOSE:
+                args.append("--verbose")
+            args.extend(BREW_ARGS)
+            args.append(package)
+            brew_execute(args, env=env)
             deps = brew_execute(["deps", package])
             deps = [d.strip() for d in deps.split("\n") if d]
             metadata = {
@@ -432,7 +441,10 @@ def execute(cmds, env=None):
 
 
 def brew_deps(package):
-    stdout = brew_execute(["deps", package])
+    args = ["deps"]
+    args.extend(BREW_ARGS)
+    args.append(package)
+    stdout = brew_execute(args)
     return [p.strip() for p in stdout.split("\n") if p]
 
 
