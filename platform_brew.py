@@ -388,9 +388,9 @@ class EnvAction(object):
         if self.action == "set":
             template = '''${variable}="${value}"'''
         elif self.action == "prepend":
-            template = '''${variable}="${value}:${variable}"'''
+            template = '''${variable}="${value}:$$${variable}"'''
         else:
-            template = '''${variable}="${variable}:${value}"'''
+            template = '''${variable}="$$${variable}:${value}"'''
         return [
             self.__eval(template),
             "export %s" % self.variable
