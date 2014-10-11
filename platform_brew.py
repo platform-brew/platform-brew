@@ -164,7 +164,7 @@ class CommandLineException(Exception):
         return self.message
 
 
-def versioned_install(recipe_context, package=None, version=None):
+def versioned_install(recipe_context, package=None, version=None, installed_deps=[]):
     if package is None:
         package = recipe_context.recipe
         version = recipe_context.version
@@ -181,10 +181,15 @@ def versioned_install(recipe_context, package=None, version=None):
             versioned = version_info[2]
             if versioned:
                 dep_to_version[dep] = dep_version
+                if dep in installed_deps:
+                    continue
                 versioned_install(recipe_context, dep, dep_version)
+                installed_deps.append(dep)
             else:
                 # Install latest.
                 dep_to_version[dep] = None
+                if dep in installed_deps:
+                    continue
                 unversioned_install(dep)
         try:
             for dep in deps:
